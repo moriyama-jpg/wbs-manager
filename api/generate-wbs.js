@@ -43,17 +43,13 @@ export default async function handler(req) {
     })
   }
 
-  const prompt = `あなたはプロジェクトマネジメントの専門家です。以下のプロジェクトの詳細なWBSを日本語で作成してください。
+const prompt = `プロジェクト名: ${projectName}
+概要: ${projectDesc||'なし'}
 
-プロジェクト名: ${projectName}
-概要: ${projectDesc || '（詳細なし）'}
+以下のJSON形式のみで返答。フェーズ3〜4個、各タスク3個、各サブタスク2個。
 
-以下のJSON形式のみで返答してください。説明・前置き・Markdownコードブロック不要です。
-
-{"projectName":"...","summary":"...","totalDuration":"...","phases":[{"id":"ph1","name":"フェーズ名","duration":"X週間","owner":"担当チーム","tasks":[{"id":"t1","name":"タスク名","duration":"X日","owner":"担当者","subtasks":[{"id":"s1","name":"サブタスク名","duration":"X日","owner":"担当者"}]}]}]}
-
-必須: フェーズ4〜6個, 各フェーズに3〜5タスク, 各タスクに2〜4サブタスク, 期間は「X日」「X週間」「Xヶ月」形式, idはユニーク文字列, 実務的・具体的な内容`
-
+{"projectName":"...","summary":"...","totalDuration":"...","phases":[{"id":"ph1","name":"...","duration":"...","owner":"...","tasks":[{"id":"t1","name":"...","duration":"...","owner":"...","subtasks":[{"id":"s1","name":"...","duration":"...","owner":"..."}]}]}]}`
+  
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
