@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import Auth from './components/Auth'
 import WBSApp from './WBSApp'
+import ResetPassword from './components/ResetPassword'
 
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [isRecovery, setIsRecovery] = useState(false)
 
   useEffect(() => {
     // 初回: 現在のセッションを取得
@@ -14,8 +16,13 @@ export default function App() {
       setLoading(false)
     })
 
-    // 以降: ログイン/ログアウトを監視
+    // ログイン/ログアウト/パスワードリセットを監視
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === 'PASSWORD_RECOVERY') {
+        setIsRecovery(true)  // ← リセットリンクを踏んだ時
+      } else {
+        setIsRecovery(false)
+      }
       setSession(session)
     })
 
@@ -30,6 +37,9 @@ export default function App() {
       </div>
     )
   }
+
+  // パスワードリセットリンクを踏んだ → 新パスワード入力画面
+  if (isRecovery) return <ResetPassword onDone={() => setIsRecovery(false)} />
 
   // 未ログイン → ログイン画面
   if (!session) return <Auth />
