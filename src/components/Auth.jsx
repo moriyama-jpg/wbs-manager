@@ -10,12 +10,12 @@ const C = {
   shadowMd: '0 4px 16px rgba(26,37,64,0.12)',
 }
 
-export default function Auth() {
-  const [mode, setMode]       = useState('login')   // 'login' | 'signup' | 'reset'
+export default function Auth({ hashError }) {
+  const [mode, setMode]       = useState(hashError ? 'reset' : 'login')   // 'login' | 'signup' | 'reset'
   const [email, setEmail]     = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [error, setError]     = useState(hashError || '')
   const [message, setMessage] = useState('')
 
   const handleSubmit = async (e) => {

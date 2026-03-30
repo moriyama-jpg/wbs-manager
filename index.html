@@ -14,6 +14,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // モジュール読み込み前にURLからパスワードリカバリーを検出してsessionStorageに保存
+      var href = window.location.href;
+      if (href.indexOf('type=recovery') !== -1 || href.indexOf('reset=1') !== -1) {
+        sessionStorage.setItem('password_recovery', '1');
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

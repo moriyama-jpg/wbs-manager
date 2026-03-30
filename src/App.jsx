@@ -4,24 +4,42 @@ import Auth from './components/Auth'
 import WBSApp from './WBSApp'
 import ResetPassword from './components/ResetPassword'
 
+// URLハッシュからSupabaseのエラーを抽出
+function getHashError() {
+  const hash = window.location.hash
+  if (!hash) return null
+  const params = new URLSearchParams(hash.substring(1))
+  const desc = params.get('error_description')
+  if (desc) return decodeURIComponent(desc.replace(/\+/g, ' '))
+  return null
+}
+
 export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [isRecovery, setIsRecovery] = useState(false)
+  const [isRecovery, setIsRecovery] = useState(
+    () => sessionStorage.getItem('password_recovery') === '1'
+  )
+  // URLハッシュにエラーがあればAuth画面に渡す（リンク期限切れ等）
+  const [hashError] = useState(getHashError)
 
   useEffect(() => {
-    // 初回: 現在のセッションを取得
+    // ハッシュエラーがあればsessionStorageのリカバリーフラグをクリア
+    if (hashError) {
+      sessionStorage.removeItem('password_recovery')
+      setIsRecovery(false)
+    }
+  }, [hashError])
+
+  useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setLoading(false)
     })
 
-    // ログイン/ログアウト/パスワードリセットを監視
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (_event === 'PASSWORD_RECOVERY') {
-        setIsRecovery(true)  // ← リセットリンクを踏んだ時
-      } else {
-        setIsRecovery(false)
+        setIsRecovery(true)
       }
       setSession(session)
     })
@@ -39,10 +57,10 @@ export default function App() {
   }
 
   // パスワードリセットリンクを踏んだ → 新パスワード入力画面
-  if (isRecovery) return <ResetPassword onDone={() => setIsRecovery(false)} />
+  if (isRecovery) return <ResetPassword onDone={() => { sessionStorage.removeItem('password_recovery'); setIsRecovery(false) }} />
 
-  // 未ログイン → ログイン画面
-  if (!session) return <Auth />
+  // 未ログイン → ログイン画面（ハッシュエラーがあれば表示）
+  if (!session) return <Auth hashError={hashError} />
 
   // ログイン済み → メインアプリ
   return <WBSApp session={session} />

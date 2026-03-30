@@ -23,6 +23,7 @@ export default function ResetPassword({ onDone }) {
     const { error } = await supabase.auth.updateUser({ password })
     setLoading(false)
     if (error) { setError(error.message); return }
+    sessionStorage.removeItem('password_recovery')
     setDone(true)
     setTimeout(() => onDone(), 2000)
   }
