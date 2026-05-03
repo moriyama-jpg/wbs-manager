@@ -1,8 +1,16 @@
+import { requireActiveMember } from './_supabaseAuth.js'
+
 export const config = { maxDuration: 60 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  try {
+    await requireActiveMember(req)
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message })
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -11,8 +19,11 @@ export default async function handler(req, res) {
   }
 
   const { projectName, projectDesc } = req.body
-  if (!projectName) {
+  if (!projectName || typeof projectName !== 'string') {
     return res.status(400).json({ error: 'projectName は必須です' })
+  }
+  if (projectName.length > 120 || (projectDesc || '').length > 2000) {
+    return res.status(400).json({ error: '入力内容が長すぎます' })
   }
 
   const prompt = `プロジェクト名: ${projectName}

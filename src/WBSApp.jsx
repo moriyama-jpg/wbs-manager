@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   supabase,
   fetchProjects, createProject, updateProject, deleteProject, subscribeProjects,
+  fetchMembers, inviteMember,
 } from './lib/supabase'
 
 const PHASE_COLORS = ['#1B5FAD','#0F7B5A','#6B4EA6','#B45309','#0E6B8A','#7C3B3B']
@@ -556,11 +557,12 @@ function ConfirmDialog({message,onOk,onCancel}) {
 }
 
 // ── WBS EDITOR ────────────────────────────────────────────────────────────────
-function WBSEditor({project,onBack,onSave,currentUser}) {
+function WBSEditor({project,onBack,onSave,currentUser,session}) {
   const [step,setStep]=useState(project.wbs?.phases?.length?'result':'input')
   const [pName,setPName]=useState(project.name||'')
   const [pDesc,setPDesc]=useState(project.description||'')
   const [wbs,setWbs]=useState(project.wbs||{phases:[]})
+  const [status,setStatus]=useState(project.status||'planning')
   const [view,setView]=useState('tree')
   const [error,setError]=useState('')
   const [editModal,setEditModal]=useState(null)
@@ -572,26 +574,29 @@ function WBSEditor({project,onBack,onSave,currentUser}) {
     if(!wbs.phases?.length)return
     clearTimeout(saveTimer.current)
     saveTimer.current=setTimeout(()=>{
-      onSave({...project,name:pName,description:pDesc,wbs,updated_at:new Date().toISOString()})
+      onSave({id:project.id,name:pName,description:pDesc,status,wbs})
     },1000)
     return()=>clearTimeout(saveTimer.current)
-  },[wbs])
+  },[wbs,pName,pDesc,status,project.id,onSave])
 
   const generate=useCallback(async()=>{
     if(!pName.trim())return
     setLoading(true);setError('')
     try{
-      const res=await fetch('/api/generate-wbs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectName:pName,projectDesc:pDesc})})
+      const token=session?.access_token
+      const res=await fetch('/api/generate-wbs',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({projectName:pName,projectDesc:pDesc})})
       const data=await res.json()
       if(!res.ok)throw new Error(data.error||'WBSの生成に失敗しました')
       const parsed=data.wbs
       parsed.phases=parsed.phases.map(ph=>({...ph,id:ph.id||newId(),done:false,tasks:(ph.tasks||[]).map(tk=>({...tk,id:tk.id||newId(),done:false,memo:'',startDate:'',endDate:'',subtasks:(tk.subtasks||[]).map(st=>({...st,id:st.id||newId(),done:false,memo:''}))}))}))
+      const nextStatus=project.status==='planning'?'active':status
       setWbs(parsed)
-      onSave({...project,name:pName,description:pDesc,wbs:parsed,status:project.status==='planning'?'active':project.status,updated_at:new Date().toISOString()})
+      setStatus(nextStatus)
+      onSave({id:project.id,name:pName,description:pDesc,wbs:parsed,status:nextStatus})
       setStep('result')
     }catch(e){setError('生成に失敗しました: '+e.message)}
     finally{setLoading(false)}
-  },[pName,pDesc,project])
+  },[pName,pDesc,project.id,project.status,status,session,onSave])
 
   const upd=fn=>setWbs(p=>{const n=JSON.parse(JSON.stringify(p));fn(n);return n})
   const handleEdit=(type,pi,ti,si)=>{
@@ -692,7 +697,7 @@ function WBSEditor({project,onBack,onSave,currentUser}) {
           </div>
         )}
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <StatusBadge status={project.status||'planning'} onChange={s=>onSave({...project,status:s,updated_at:new Date().toISOString()})}/>
+          <StatusBadge status={status} onChange={s=>{setStatus(s);onSave({id:project.id,name:pName,description:pDesc,status:s,wbs})}}/>
           <span style={{fontSize:11,color:C.textMuted}}>{currentUser?.email}</span>
         </div>
       </div>
@@ -757,8 +762,54 @@ function WBSEditor({project,onBack,onSave,currentUser}) {
   )
 }
 
+function MemberAdminPanel({members,onInvite,loading}) {
+  const [email,setEmail]=useState('')
+  const [role,setRole]=useState('member')
+  const [error,setError]=useState('')
+  const [message,setMessage]=useState('')
+
+  const submit=async(e)=>{
+    e.preventDefault()
+    setError('');setMessage('')
+    try{
+      await onInvite(email,role)
+      setMessage(`${email} に招待メールを送信しました`)
+      setEmail('');setRole('member')
+    }catch(err){setError(err.message)}
+  }
+
+  return(
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:18,boxShadow:C.shadow,marginBottom:24}}>
+      <div style={{display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+        <div style={{flex:'1 1 260px'}}>
+          <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:4}}>メンバー招待</div>
+          <div style={{fontSize:11,color:C.textMuted}}>flyingcolors.co.jp のメールアドレスだけ招待できます</div>
+        </div>
+        <form onSubmit={submit} style={{display:'flex',gap:8,flex:'2 1 460px',flexWrap:'wrap'}}>
+          <input value={email} onChange={e=>setEmail(e.target.value)} type="email" required placeholder="name@flyingcolors.co.jp" style={{...inputStyle,background:C.surface,flex:'1 1 240px'}}/>
+          <select value={role} onChange={e=>setRole(e.target.value)} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:5,padding:'8px 10px',fontSize:12,color:C.textSub}}>
+            <option value="member">member</option>
+            <option value="admin">admin</option>
+          </select>
+          <button disabled={loading} style={{background:loading?C.borderMd:C.accent,border:'none',color:'#fff',borderRadius:5,padding:'8px 16px',cursor:loading?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>招待</button>
+        </form>
+      </div>
+      {(error||message)&&<div style={{marginTop:12,fontSize:12,color:error?C.danger:C.success}}>{error||message}</div>}
+      {members?.length>0&&(
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:14}}>
+          {members.map(m=>(
+            <span key={m.id} style={{border:`1px solid ${C.border}`,background:C.surfaceAlt,borderRadius:4,padding:'5px 8px',fontSize:11,color:C.textSub}}>
+              {m.email} / {m.role} / {m.status}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
-function Dashboard({projects,onCreate,onOpen,onUpdateStatus,onDelete,currentUser,onLogout}) {
+function Dashboard({projects,onCreate,onOpen,onUpdateStatus,onDelete,currentUser,onLogout,member,members,onInvite,inviteLoading}) {
   const [search,setSearch]=useState('')
   const [filterStatus,setFilterStatus]=useState('all')
   const [sortBy,setSortBy]=useState('updated_at')
@@ -790,6 +841,7 @@ function Dashboard({projects,onCreate,onOpen,onUpdateStatus,onDelete,currentUser
             <button onClick={()=>setDashView('allgantt')} style={{background:dashView==='allgantt'?C.accent:'transparent',color:dashView==='allgantt'?'#fff':C.textSub,border:'none',padding:'5px 12px',cursor:'pointer',fontSize:11,transition:'all .15s'}}>📅 全体ガント</button>
           </div>
           <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
+            {member?.role==='admin'&&<Badge color={C.success}>admin</Badge>}
             <span style={{fontSize:12,color:C.textMuted}}>{currentUser?.email}</span>
             <button onClick={onLogout} style={{background:'transparent',border:`1px solid ${C.border}`,color:C.textMuted,borderRadius:5,padding:'5px 12px',cursor:'pointer',fontSize:11,transition:'all .15s'}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=C.danger;e.currentTarget.style.color=C.danger}}
@@ -801,6 +853,7 @@ function Dashboard({projects,onCreate,onOpen,onUpdateStatus,onDelete,currentUser
       </div>
 
       <div style={{maxWidth:1200,margin:'0 auto',padding:'28px 32px'}}>
+        {member?.role==='admin'&&<MemberAdminPanel members={members} onInvite={onInvite} loading={inviteLoading}/>}
         {dashView==='allgantt'?(
           <div>
             <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:16}}>全プロジェクト ガントチャート</div>
@@ -932,14 +985,21 @@ function Dashboard({projects,onCreate,onOpen,onUpdateStatus,onDelete,currentUser
 }
 
 // ── ROOT ──────────────────────────────────────────────────────────────────────
-export default function WBSApp({session}) {
+export default function WBSApp({session,member}) {
   const [projects,setProjects]=useState([])
+  const [members,setMembers]=useState([])
   const [activeId,setActiveId]=useState(null)
   const [loaded,setLoaded]=useState(false)
+  const [inviteLoading,setInviteLoading]=useState(false)
 
   useEffect(()=>{
     fetchProjects().then(data=>{setProjects(data);setLoaded(true)}).catch(err=>{console.error(err);setLoaded(true)})
   },[])
+
+  useEffect(()=>{
+    if(member?.role!=='admin')return
+    fetchMembers().then(setMembers).catch(console.error)
+  },[member])
 
   useEffect(()=>{
     const unsubscribe=subscribeProjects(()=>{
@@ -966,6 +1026,17 @@ export default function WBSApp({session}) {
     await deleteProject(id);setProjects(p=>p.filter(x=>x.id!==id));if(activeId===id)setActiveId(null)
   }
 
+  const handleInvite=async(email,role)=>{
+    setInviteLoading(true)
+    try{
+      await inviteMember(email,role)
+      const list=await fetchMembers()
+      setMembers(list)
+    }finally{
+      setInviteLoading(false)
+    }
+  }
+
   const handleLogout=()=>supabase.auth.signOut()
 
   if(!loaded)return(
@@ -976,10 +1047,10 @@ export default function WBSApp({session}) {
 
   const activeProject=projects.find(p=>p.id===activeId)
   if(activeId&&activeProject)return(
-    <WBSEditor key={activeId} project={activeProject} onBack={()=>setActiveId(null)} onSave={handleSave} currentUser={session.user}/>
+    <WBSEditor key={activeId} project={activeProject} onBack={()=>setActiveId(null)} onSave={handleSave} currentUser={session.user} session={session}/>
   )
 
   return(
-    <Dashboard projects={projects} onCreate={handleCreate} onOpen={id=>setActiveId(id)} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} currentUser={session.user} onLogout={handleLogout}/>
+    <Dashboard projects={projects} onCreate={handleCreate} onOpen={id=>setActiveId(id)} onUpdateStatus={handleUpdateStatus} onDelete={handleDelete} currentUser={session.user} onLogout={handleLogout} member={member} members={members} onInvite={handleInvite} inviteLoading={inviteLoading}/>
   )
 }

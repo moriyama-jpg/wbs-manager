@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const C = {
@@ -10,13 +10,17 @@ const C = {
   shadowMd: '0 4px 16px rgba(26,37,64,0.12)',
 }
 
-export default function Auth({ hashError }) {
-  const [mode, setMode]       = useState(hashError ? 'reset' : 'login')   // 'login' | 'signup' | 'reset'
+export default function Auth({ hashError, authError }) {
+  const [mode, setMode]       = useState(hashError ? 'reset' : 'login')   // 'login' | 'reset'
   const [email, setEmail]     = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState(hashError || '')
+  const [error, setError]     = useState(hashError || authError || '')
   const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (authError) setError(authError)
+  }, [authError])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -28,15 +32,6 @@ export default function Auth({ hashError }) {
       if (mode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-
-      } else if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        })
-        if (error) throw error
-        setMessage('確認メールを送りました。メールのリンクをクリックしてアカウントを有効化してください。')
 
       } else if (mode === 'reset') {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -76,7 +71,7 @@ export default function Auth({ hashError }) {
 
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 32, boxShadow: C.shadowMd }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 24 }}>
-            {mode === 'login' ? 'ログイン' : mode === 'signup' ? 'アカウント作成' : 'パスワードリセット'}
+            {mode === 'login' ? 'ログイン' : 'パスワードリセット'}
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -118,16 +113,13 @@ export default function Auth({ hashError }) {
               border: 'none', borderRadius: 6, padding: '12px', fontSize: 14, fontWeight: 700,
               cursor: loading ? 'not-allowed' : 'pointer', transition: 'background 0.2s',
             }}>
-              {loading ? '処理中...' : mode === 'login' ? 'ログイン' : mode === 'signup' ? 'アカウント作成' : 'リセットメールを送る'}
+              {loading ? '処理中...' : mode === 'login' ? 'ログイン' : 'リセットメールを送る'}
             </button>
           </form>
 
           {/* Mode switchers */}
           <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
             {mode === 'login' && <>
-              <button onClick={() => { setMode('signup'); setError(''); setMessage(''); }} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 13 }}>
-                アカウントをお持ちでない方はこちら
-              </button>
               <button onClick={() => { setMode('reset'); setError(''); setMessage(''); }} style={{ background: 'none', border: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 12 }}>
                 パスワードを忘れた方
               </button>

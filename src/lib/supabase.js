@@ -9,6 +9,47 @@ if (!supabaseUrl || !supabaseAnon) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnon)
 
+// ── メンバー権限 ──────────────────────────────────────────────────────────────
+
+/** ログイン中ユーザーのメンバー情報 */
+export async function fetchCurrentMember() {
+  const { data, error } = await supabase
+    .from('members')
+    .select('id,email,role,status')
+    .eq('id', (await supabase.auth.getUser()).data.user?.id)
+    .single()
+  if (error) throw error
+  return data
+}
+
+/** 管理者用: メンバー一覧 */
+export async function fetchMembers() {
+  const { data, error } = await supabase
+    .from('members')
+    .select('id,email,role,status,created_at,updated_at')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+/** 管理者用: メンバー招待 */
+export async function inviteMember(email, role = 'member') {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.access_token) throw new Error('ログインが必要です')
+
+  const res = await fetch('/api/invite-user', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ email, role }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || '招待に失敗しました')
+  return data.member
+}
+
 // ── プロジェクト CRUD ──────────────────────────────────────────────────────
 
 /** 全プロジェクト取得（updated_at 降順） */
