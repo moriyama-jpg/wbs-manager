@@ -772,8 +772,8 @@ function MemberAdminPanel({members,onInvite,loading}) {
     e.preventDefault()
     setError('');setMessage('')
     try{
-      await onInvite(email,role)
-      setMessage(`${email} に招待メールを送信しました`)
+      const result=await onInvite(email,role)
+      setMessage(result?.alreadyRegistered ? `${email} を有効化し、パスワード再設定メールを送信しました` : `${email} に招待メールを送信しました`)
       setEmail('');setRole('member')
     }catch(err){setError(err.message)}
   }
@@ -1029,9 +1029,10 @@ export default function WBSApp({session,member}) {
   const handleInvite=async(email,role)=>{
     setInviteLoading(true)
     try{
-      await inviteMember(email,role)
+      const result=await inviteMember(email,role)
       const list=await fetchMembers()
       setMembers(list)
+      return result
     }finally{
       setInviteLoading(false)
     }

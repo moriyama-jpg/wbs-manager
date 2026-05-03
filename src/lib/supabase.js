@@ -47,7 +47,7 @@ export async function inviteMember(email, role = 'member') {
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || '招待に失敗しました')
-  return data.member
+  return data
 }
 
 // ── プロジェクト CRUD ──────────────────────────────────────────────────────
